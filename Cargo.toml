@@ -1,0 +1,15 @@
+[package]
+name = "touchgrass"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+description = "Track active time in your dev tools"
+license = "MIT"
+authors = ["ado11231 <adoalagic0@gmail.com>"]
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+
+[lints.rust]
+missing_docs = "warn"
