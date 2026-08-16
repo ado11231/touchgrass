@@ -17,3 +17,4 @@ missing_docs = "warn"
 [dependencies]
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
+toml = "1"
