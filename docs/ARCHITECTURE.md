@@ -27,9 +27,9 @@ flowchart LR
 
 ## Modules
 
-One job per file.
+One job per file. `main.rs` connects the modules. The arrows below show data flow, not module imports.
 
-- `main.rs` reads the command
+- `main.rs` reads the command and passes values between modules
 - `config.rs` loads the tool list
 - `tracker.rs` checks open programs and counts time
 - `idle.rs` checks if you're at the computer
@@ -55,8 +55,11 @@ flowchart TD
 touchgrass/
   Cargo.toml
   README.md
-  ARCHITECTURE.md
-  COMMANDS.md
+  LICENSE
+  docs/
+    ARCHITECTURE.md
+    COMMANDS.md
+    CONTRIBUTING.md
   src/
     main.rs
     config.rs
@@ -111,8 +114,9 @@ An open tool isn't a used tool. VS Code left open overnight shouldn't count.
 - Idle means no keyboard or mouse input for 2 minutes
 - Idle checks count nothing
 - The limit is set in the config (`idle_after`, in seconds)
-- Mac: reads the system idle time
-- Linux: reads the idle time from X11 or the desktop session. If it can't, it counts as active and prints a warning once.
+- Mac: reads system idle time through Core Graphics. Errors stop the tracker after saving.
+- Linux: uses `xprintidle` on X11 or `gdbus` with GNOME's idle monitor on Wayland. These helpers must be installed for idle detection. If unavailable, it counts as active and prints a warning once.
+- Other Wayland desktops use the same active fallback. An XWayland session alone cannot report input across the whole desktop.
 
 ## Priority
 
@@ -227,7 +231,7 @@ The tracker runs in the background, so errors go to a log.
 ## Errors
 
 - Bad `config.toml`: the dashboard says what's wrong and where. The tracker keeps the last good config.
-- Bad `data.json`: renamed to `data.json.bak`, and a fresh file starts. Nothing is deleted.
+- Bad `data.json`: the dashboard reports the error without writing files. The tracker holds its lock, moves the file to `data.json.bak`, and starts fresh. Existing backups get numbered names and are never replaced.
 - No `data.json` yet: the dashboard shows zeros and says to run `touchgrass install`.
 
 ## Platforms
@@ -247,4 +251,38 @@ The tracker runs in the background, so errors go to a log.
 - `chrono` handles dates
 - `owo-colors` adds color
 - `terminal_size` fits the heatmap to the window
-- Idle time: to decide. Either a small crate or direct system calls per platform.
+- `anyhow` adds context to errors
+- `tempfile` safely replaces saved files and creates test folders
+- `ctrlc` handles Ctrl+C, SIGTERM, and SIGHUP
+- Idle time uses Core Graphics on macOS and desktop helpers on Linux.
+
+## File formats
+
+The config has an `idle_after` value in seconds and a `[[tools]]` table for each tool:
+
+```toml
+idle_after = 120
+
+[[tools]]
+name = "Claude Code"
+kind = "ai"
+names = ["claude"]
+```
+
+Kinds are `ai`, `editor`, and `terminal`. Names must be unique and matching names
+must not be empty. An empty tool list pauses counting. Bad edits leave the last
+good config in use. Bad settings at tracker startup cause an error.
+
+Saved time uses this shape:
+
+```json
+{
+  "installed_on": "2026-08-14",
+  "days": {
+    "2026-08-14": { "Claude Code": 75 }
+  }
+}
+```
+
+The install date is set when tracking first starts. A valid empty object means
+no saved time. A zero-byte file is invalid and is preserved during recovery.

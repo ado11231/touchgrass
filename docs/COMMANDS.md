@@ -92,11 +92,12 @@ Bars are bright magenta `█` on dark gray `░`.
 
 - Every day of the year shows. Days before install or in the future are empty gray.
 - Bars are each tool's share of the year
-- Narrow terminal? Prints Jan–Jun, then Jul–Dec.
+- Narrow terminal? Prints Jan-Jun, then Jul-Dec. Very narrow windows split those ranges into smaller panels.
 
 ### Rules
 
 - Nothing resets at New Year. The default view just keeps sliding.
 - Old weeks slide off the heatmap, but their time stays in all time
+- The current week is one of the 52 columns. Narrow default views wrap into smaller panels.
 - Color turns off with `NO_COLOR` or when output isn't a terminal. Squares become `· ░ ▒ ▓ █`.
 - Without full color, uses the closest 256-color shades
