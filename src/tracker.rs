@@ -158,3 +158,74 @@ mod tests {
             vec![String::from("kitty")],
             vec![String::from("code")],
             vec![String::from("claude")],
+            vec![String::from("codex")],
+        ];
+        let tools = [
+            (2, "Terminal", names[0].as_slice()),
+            (1, "Editor", names[1].as_slice()),
+            (0, "Claude", names[2].as_slice()),
+            (0, "Codex", names[3].as_slice()),
+        ];
+        let processes = vec![
+            String::from("kitty"),
+            String::from("Code Helper"),
+            String::from("node\n/usr/local/CLAUDE/cli.js"),
+            String::from("codex"),
+        ];
+        assert_eq!(pick_tool(tools.into_iter(), &processes), Some("Claude"));
+        assert_eq!(
+            pick_tool(tools.into_iter(), &processes[..2]),
+            Some("Editor")
+        );
+        assert_eq!(
+            pick_tool(tools.into_iter(), &processes[..1]),
+            Some("Terminal")
+        );
+        assert_eq!(pick_tool(tools.into_iter(), &[]), None);
+        Ok(())
+    }
+
+    #[test]
+    fn records_each_side_of_midnight_separately() -> Result<()> {
+        let mut days = BTreeMap::new();
+        let before = NaiveDate::parse_from_str("2026-12-31", "%Y-%m-%d")?;
+        let after = NaiveDate::parse_from_str("2027-01-01", "%Y-%m-%d")?;
+        record(&mut days, before, "Codex")?;
+        record(&mut days, after, "Codex")?;
+        assert_eq!(days[&before]["Codex"], CHECK_INTERVAL.as_secs());
+        assert_eq!(days[&after]["Codex"], CHECK_INTERVAL.as_secs());
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_counter_overflow() -> Result<()> {
+        let date = NaiveDate::parse_from_str("2026-08-14", "%Y-%m-%d")?;
+        let mut days =
+            BTreeMap::from([(date, BTreeMap::from([(String::from("Codex"), u64::MAX)]))]);
+        assert!(record(&mut days, date, "Codex").is_err());
+        assert_eq!(days[&date]["Codex"], u64::MAX);
+        Ok(())
+    }
+
+    #[test]
+    fn lock_is_exclusive_and_released_on_drop() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("touchgrass.lock");
+        let lock = acquire_lock(&path)?;
+        assert!(acquire_lock(&path).is_err());
+        drop(lock);
+        let _next = acquire_lock(&path)?;
+        Ok(())
+    }
+    #[test]
+    fn sample_schedule_skips_missed_checks() -> Result<()> {
+        let previous = Instant::now();
+        assert_eq!(next_deadline(previous, previous), previous + CHECK_INTERVAL);
+        let after_sleep = previous + SAVE_INTERVAL;
+        assert_eq!(
+            next_deadline(previous, after_sleep),
+            after_sleep + CHECK_INTERVAL
+        );
+        Ok(())
+    }
+}
