@@ -158,3 +158,44 @@ fn track(config_path: PathBuf, data_folder: PathBuf) -> Result<()> {
     let mut data = match storage::load(&data_path)? {
         storage::Loaded::Missing => storage::Data::default(),
         storage::Loaded::Present(data) => data,
+        storage::Loaded::Invalid(error) => {
+            let backup = storage::backup(&data_path)?;
+            eprintln!("touchgrass: {error:#}; preserved at {}", backup.display());
+            storage::Data::default()
+        }
+    };
+    data.installed_on.get_or_insert(Local::now().date_naive());
+    storage::save(&data_path, &data)?;
+    let mut system = sysinfo::System::new();
+    let mut warned = false;
+    tracker::run(shutdown, |event| {
+        match event {
+            tracker::Event::Sample => {
+                let limit = config.idle_after.unwrap_or(tracker::DEFAULT_IDLE_AFTER);
+                if idle::active(limit, &mut warned)? {
+                    let processes = tracker::processes(&mut system);
+                    let tools = config.tools.iter().map(|tool| {
+                        let priority = match tool.kind {
+                            config::Kind::Ai => 0,
+                            config::Kind::Editor => 1,
+                            config::Kind::Terminal => 2,
+                        };
+                        (priority, tool.name.as_str(), tool.names.as_slice())
+                    });
+                    if let Some(tool) = tracker::pick_tool(tools, &processes) {
+                        tracker::record(&mut data.days, Local::now().date_naive(), tool)?;
+                    }
+                }
+            }
+            tracker::Event::Maintain => {
+                storage::save(&data_path, &data)?;
+                match config::load(&config_path) {
+                    Ok(updated) => config = updated,
+                    Err(error) => eprintln!("touchgrass: keeping previous config: {error:#}"),
+                }
+            }
+            tracker::Event::Stop => storage::save(&data_path, &data)?,
+        }
+        Ok(())
+    })
+}
