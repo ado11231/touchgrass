@@ -158,3 +158,116 @@ pub fn render(
             paint(&"█".repeat(filled), 4, color),
             paint(&"░".repeat(BAR_WIDTH - filled), 0, color)
         );
+        writeln!(
+            output,
+            "  {name:name_width$}  {bar}  {:>10}",
+            duration(seconds)
+        )?;
+    }
+    Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn date(value: &str) -> Result<NaiveDate> {
+        Ok(NaiveDate::parse_from_str(value, "%Y-%m-%d")?)
+    }
+
+    #[test]
+    fn color_levels_include_exact_boundaries() -> Result<()> {
+        assert_eq!(level(0), 0);
+        assert_eq!(level(u128::from(HOUR - 1)), 1);
+        for (index, bound) in LEVELS.iter().enumerate() {
+            assert_eq!(level(u128::from(*bound)), index + 2);
+        }
+        assert_eq!(paint("x", 4, Color::None), "x");
+        assert!(paint("x", 4, Color::True).contains("38;2;224;112;255"));
+        assert!(paint("x", 4, Color::Palette).contains("38;5;177"));
+        Ok(())
+    }
+
+    #[test]
+    fn week_crosses_new_year_without_resetting_totals() -> Result<()> {
+        let previous = date("2026-12-31")?;
+        let today = date("2027-01-01")?;
+        let old = date("2025-01-01")?;
+        let days = BTreeMap::from([
+            (old, BTreeMap::from([(String::from("Old tool"), HOUR)])),
+            (previous, BTreeMap::from([(String::from("Codex"), HOUR)])),
+            (today, BTreeMap::from([(String::from("Codex"), HOUR)])),
+        ]);
+        let text = render(&days, Some(old), today, None, 120, Color::None)?;
+        let lines: Vec<_> = text.lines().map(str::trim).collect();
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("Today ") && line.ends_with("1h 00m"))
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("This week") && line.ends_with("2h 00m"))
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("All time") && line.ends_with("3h 00m"))
+        );
+        assert!(!text.contains("Old tool"));
+        assert!(!text.contains('\x1b'));
+        Ok(())
+    }
+
+    #[test]
+    fn year_contains_leap_day_and_all_months() -> Result<()> {
+        let today = date("2025-01-01")?;
+        let text = render(&BTreeMap::new(), None, today, Some(2024), 80, Color::None)?;
+        assert_eq!(text.matches('·').count(), 367);
+        for month in [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ] {
+            assert!(text.contains(month), "missing {month}");
+        }
+        assert!(!text.contains('\x1b'));
+        Ok(())
+    }
+
+    #[test]
+    fn no_data_and_tiny_terminals_render_safely() -> Result<()> {
+        let today = date("2026-08-14")?;
+        for width in [0, 10, 40, 80, 120] {
+            let text = render(&BTreeMap::new(), None, today, None, width, Color::None)?;
+            assert!(text.contains("No time recorded."));
+            assert!(text.contains("0h 00m"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn year_tools_are_sorted_and_totals_ignore_other_years() -> Result<()> {
+        let today = date("2026-12-31")?;
+        let days = BTreeMap::from([
+            (
+                today,
+                BTreeMap::from([
+                    (String::from("Small"), HOUR),
+                    (String::from("Large"), HOUR * 3),
+                ]),
+            ),
+            (
+                date("2025-01-01")?,
+                BTreeMap::from([(String::from("Old"), HOUR)]),
+            ),
+        ]);
+        let text = render(&days, None, today, Some(2026), 120, Color::None)?;
+        assert!(text.contains("2026 total  4h 00m"));
+        assert!(!text.contains("Old"));
+        assert!(
+            text.find("Large").context("missing Large")?
+                < text.find("Small").context("missing Small")?
+        );
+        Ok(())
+    }
+}
