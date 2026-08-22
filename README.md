@@ -20,8 +20,9 @@ touchgrass uninstall
                     Stop the login service and keep saved time
 ```
 
-The tracker counts one open tool at a time while you are active.
-AI tools take priority over editors, then terminals.
+While you are active, the tracker credits the focused app (kitty, VS Code)
+and the best tool running inside it (Claude Code in a kitty tab, Neovim).
+Untracked apps, like a browser, count nothing.
 Edit `config.toml` to change the tool list or idle limit.
 
 Linux autostart needs a systemd user session. Idle checks use `xprintidle`
