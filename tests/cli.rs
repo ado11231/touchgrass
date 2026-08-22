@@ -51,7 +51,13 @@ fn year_view_reads_saved_time_and_reports_bad_config() -> Result<()> {
     fs::write(sandbox.find("config.toml")?, "bad = [")?;
     let output = sandbox.command().arg("2024").output()?;
     assert!(output.status.success());
-    assert!(String::from_utf8(output.stdout)?.contains("2024 total  1h 00m"));
+    let text = String::from_utf8(output.stdout)?;
+    let mut lines = text.lines().skip_while(|line| !line.contains("2024 TOTAL"));
+    assert!(
+        lines
+            .nth(1)
+            .is_some_and(|values| values.trim_start().starts_with("1h 00m"))
+    );
     assert!(String::from_utf8(output.stderr)?.contains("config.toml"));
     assert_eq!(fs::read(&path)?, saved);
     Ok(())

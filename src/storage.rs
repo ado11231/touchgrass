@@ -21,6 +21,12 @@ pub struct Data {
     /// Seconds per tool on each local date.
     #[serde(default)]
     pub days: BTreeMap<NaiveDate, BTreeMap<String, u64>>,
+    /// Wall-clock seconds in any tool on each local date.
+    ///
+    /// Tools can overlap, such as Claude Code inside kitty, so totals come
+    /// from here. Days saved before this field existed use the sum of tools.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub active: BTreeMap<NaiveDate, u64>,
 }
 
 /// A read keeps missing data separate from invalid data.
@@ -143,6 +149,7 @@ mod tests {
         let data = Data {
             installed_on: Some(date),
             days: BTreeMap::from([(date, BTreeMap::from([(String::from("Claude Code"), 75)]))]),
+            active: BTreeMap::from([(date, 75)]),
         };
         save(&path, &data)?;
         match load(&path)? {

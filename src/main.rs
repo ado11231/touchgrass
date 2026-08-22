@@ -11,6 +11,7 @@ use std::{
 mod autostart;
 mod config;
 mod dashboard;
+mod focus;
 mod idle;
 mod storage;
 mod tracker;
@@ -104,7 +105,7 @@ fn run() -> Result<()> {
                 .unwrap_or(DEFAULT_WIDTH);
             let output = dashboard::render(
                 &data.days,
-                data.installed_on,
+                &data.active,
                 Local::now().date_naive(),
                 year,
                 width,
@@ -112,7 +113,7 @@ fn run() -> Result<()> {
             )?;
             print_output(&output)?;
             if missing {
-                print_output("\n  No saved time yet. Run touchgrass install to start tracking.\n")?;
+                print_output("  No saved time yet. Run touchgrass install to start tracking.\n\n")?;
             }
             Ok(())
         }
@@ -174,16 +175,25 @@ fn track(config_path: PathBuf, data_folder: PathBuf) -> Result<()> {
                 let limit = config.idle_after.unwrap_or(tracker::DEFAULT_IDLE_AFTER);
                 if idle::active(limit, &mut warned)? {
                     let processes = tracker::processes(&mut system);
-                    let tools = config.tools.iter().map(|tool| {
-                        let priority = match tool.kind {
-                            config::Kind::Ai => 0,
-                            config::Kind::Editor => 1,
-                            config::Kind::Terminal => 2,
-                        };
-                        (priority, tool.name.as_str(), tool.names.as_slice())
-                    });
-                    if let Some(tool) = tracker::pick_tool(tools, &processes) {
-                        tracker::record(&mut data.days, Local::now().date_naive(), tool)?;
+                    let tools: Vec<_> = config
+                        .tools
+                        .iter()
+                        .map(|tool| {
+                            let priority = match tool.kind {
+                                config::Kind::Ai => 0,
+                                config::Kind::Editor => 1,
+                                config::Kind::Terminal => 2,
+                            };
+                            (priority, tool.name.as_str(), tool.names.as_slice())
+                        })
+                        .collect();
+                    let picked = tracker::pick_tools(&tools, &processes, focus::pid());
+                    let today = Local::now().date_naive();
+                    for tool in &picked {
+                        tracker::record(&mut data.days, today, tool)?;
+                    }
+                    if !picked.is_empty() {
+                        tracker::record_active(&mut data.active, today)?;
                     }
                 }
             }

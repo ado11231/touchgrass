@@ -35,7 +35,9 @@ impl Sandbox {
             .env("HOME", self.directory.path())
             .env("XDG_CONFIG_HOME", self.directory.path().join("settings"))
             .env("XDG_DATA_HOME", self.directory.path().join("saved"))
-            .env("NO_COLOR", "1");
+            .env("NO_COLOR", "1")
+            // Match every process so tests don't depend on the focused window.
+            .env("TOUCHGRASS_ALL_PROCESSES", "1");
         command
     }
 

@@ -32,6 +32,7 @@ One job per file. `main.rs` connects the modules. The arrows below show data flo
 - `main.rs` reads the command and passes values between modules
 - `config.rs` loads the tool list
 - `tracker.rs` checks open programs and counts time
+- `focus.rs` finds the app that owns the focused window
 - `idle.rs` checks if you're at the computer
 - `storage.rs` loads and saves time
 - `dashboard.rs` adds up time and prints it
@@ -98,7 +99,7 @@ flowchart TD
     A{"Idle?"} -->|Yes| G["Wait"]
     A -->|No| B["List open programs"]
     B --> C["Match to tools"]
-    C --> D["Pick one tool"]
+    C --> D["Pick focused tools"]
     D --> E["Add 5 seconds"]
     E --> H{"A minute since last save?"}
     H -->|Yes| F["Save"]
@@ -120,10 +121,16 @@ An open tool isn't a used tool. VS Code left open overnight shouldn't count.
 
 ## Priority
 
-- One tool gets time per check
-- AI tools beat editors, editors beat terminal
-- Same kind? First in the list wins
-- No match, no time
+Background programs don't count. Claude Code's helpers and the Codex daemon run all day, so the tracker starts from the focused window.
+
+- Mac: the owner of the frontmost window, from Core Graphics
+- Linux: `xdotool getactivewindow` on X11
+- The focused app gets time if it's a tracked tool, like kitty or VS Code
+- The best tool running inside it also gets time, like Claude Code in a kitty tab
+- Untracked focused app? No time, even if a tool runs inside it
+- Inside the app, AI tools beat editors, editors beat terminal. Same kind? First in the list wins
+- No focus info (Wayland, missing `xdotool`, `TOUCHGRASS_ALL_PROCESSES=1`): one tool from all programs, with the same priority
+- Tools overlap, so each day also saves active seconds. Totals use those, not the sum of tools.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#6b2a85", "primaryTextColor": "#ffffff", "primaryBorderColor": "#e070ff", "nodeBorder": "#e070ff", "lineColor": "#e070ff", "textColor": "#ffffff", "edgeLabelBackground": "#3d1a4d"}}}%%
@@ -156,14 +163,14 @@ Terminal      kind: terminal  names: kitty, ghostty, iTerm2
 
 ### Matching
 
-- A name matches if it appears in the program's name or its command line
+- A name matches the start of the program's name, an argument, or a path part, up to a non-letter. `code` matches `Code Helper` but not `codex` or `claude-code`.
 - Case doesn't matter
 - Command line matters because some tools run as `node` (like Claude Code or Codex installed through npm)
 - Linux cuts program names at 15 characters, which is one more reason to check the command line
 
 ## Storage
 
-Seconds per tool, per day.
+Seconds per tool, per day, plus active seconds per day (`active`). Older files without `active` use the sum of tools.
 
 - Mac: `~/Library/Application Support/touchgrass/data.json`
 - Linux: `~/.local/share/touchgrass/data.json`
@@ -171,7 +178,7 @@ Seconds per tool, per day.
 - Each check goes to the day it happened, so time after midnight goes to the new day
 - Saves once a minute, so a crash loses a minute at most
 - Saves to a temp file, then renames it, so the dashboard never reads a half-written file
-- Also keeps the install date, so the heatmap knows where to start. If it's missing, the first saved day is used.
+- Also keeps the install date. If it's missing, the first saved day is used.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#6b2a85", "primaryTextColor": "#ffffff", "primaryBorderColor": "#e070ff", "nodeBorder": "#e070ff", "lineColor": "#e070ff", "textColor": "#ffffff", "edgeLabelBackground": "#3d1a4d"}}}%%
