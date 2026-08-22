@@ -45,8 +45,19 @@ pub fn acquire_lock(path: &Path) -> Result<File> {
     }
 }
 
+/// One running program and where it sits in the process tree.
+#[derive(Clone)]
+pub struct Process {
+    /// Process ID.
+    pub pid: u32,
+    /// Parent process ID, when known.
+    pub parent: Option<u32>,
+    /// Program name followed by each argument on its own line.
+    pub text: String,
+}
+
 /// Read process names and full command lines from a reusable snapshot.
-pub fn processes(system: &mut System) -> Vec<String> {
+pub fn processes(system: &mut System) -> Vec<Process> {
     system.refresh_processes_specifics(
         ProcessesToUpdate::All,
         true,
@@ -61,29 +72,89 @@ pub fn processes(system: &mut System) -> Vec<String> {
                 text.push('\n');
                 text.push_str(&argument.to_string_lossy());
             }
-            text
+            Process {
+                pid: process.pid().as_u32(),
+                parent: process.parent().map(sysinfo::Pid::as_u32),
+                text,
+            }
         })
         .collect()
+}
+
+/// Check whether a program name or argument names this tool.
+///
+/// The name must start a path component and end at a non-alphanumeric
+/// character, so `code` matches `Code Helper` but not `codex` or `claude-code`.
+fn matches(text: &str, needle: &str) -> bool {
+    let text = text.to_lowercase();
+    let needle = needle.to_lowercase();
+    text.split(['\n', '/']).any(|part| {
+        part.strip_prefix(needle.as_str())
+            .is_some_and(|rest| !rest.starts_with(char::is_alphanumeric))
+    })
 }
 
 /// Pick the first matching tool in the highest priority group.
 pub fn pick_tool<'a>(
     tools: impl Iterator<Item = (usize, &'a str, &'a [String])>,
-    processes: &[String],
+    processes: &[&str],
 ) -> Option<&'a str> {
-    let processes: Vec<_> = processes
-        .iter()
-        .map(|process| process.to_lowercase())
-        .collect();
     tools
         .filter(|(_, _, names)| {
-            names.iter().any(|name| {
-                let needle = name.to_lowercase();
-                processes.iter().any(|process| process.contains(&needle))
-            })
+            names
+                .iter()
+                .any(|name| processes.iter().any(|process| matches(process, name)))
         })
         .min_by_key(|(priority, _, _)| *priority)
         .map(|(_, name, _)| name)
+}
+
+/// Pick the tools in use right now.
+///
+/// With a focused window, credit the focused app's own tool and the best tool
+/// running inside it, such as Claude Code in a kitty tab. Untracked apps get
+/// nothing, even when a tool runs inside them, such as a browser helper.
+/// Without a focused window, fall back to the best tool running anywhere.
+pub fn pick_tools<'a>(
+    tools: &[(usize, &'a str, &'a [String])],
+    processes: &[Process],
+    focused: Option<u32>,
+) -> Vec<&'a str> {
+    let Some(root) = focused.filter(|pid| processes.iter().any(|process| process.pid == *pid))
+    else {
+        let all: Vec<_> = processes
+            .iter()
+            .map(|process| process.text.as_str())
+            .collect();
+        return pick_tool(tools.iter().copied(), &all).into_iter().collect();
+    };
+    let mut tree = vec![root];
+    let mut index = 0;
+    while let Some(parent) = tree.get(index).copied() {
+        tree.extend(
+            processes
+                .iter()
+                .filter(|process| process.parent == Some(parent) && process.pid != parent)
+                .map(|process| process.pid),
+        );
+        index += 1;
+    }
+    let text = |pid: u32| {
+        processes
+            .iter()
+            .filter(move |process| process.pid == pid)
+            .map(|process| process.text.as_str())
+    };
+    let own: Vec<_> = text(root).collect();
+    let inner: Vec<_> = tree.iter().skip(1).flat_map(|pid| text(*pid)).collect();
+    let Some(app) = pick_tool(tools.iter().copied(), &own) else {
+        return Vec::new();
+    };
+    let inside = pick_tool(
+        tools.iter().copied().filter(|(_, name, _)| *name != app),
+        &inner,
+    );
+    std::iter::once(app).chain(inside).collect()
 }
 
 /// Credit one sample to the date on which it was observed.
@@ -100,6 +171,15 @@ pub fn record(
     } else {
         totals.insert(String::from(tool), CHECK_INTERVAL.as_secs());
     }
+    Ok(())
+}
+
+/// Credit one sample of wall-clock time, however many tools were in use.
+pub fn record_active(active: &mut BTreeMap<NaiveDate, u64>, date: NaiveDate) -> Result<()> {
+    let seconds = active.entry(date).or_default();
+    *seconds = seconds
+        .checked_add(CHECK_INTERVAL.as_secs())
+        .context("saved time is too large")?;
     Ok(())
 }
 
@@ -166,11 +246,11 @@ mod tests {
             (0, "Claude", names[2].as_slice()),
             (0, "Codex", names[3].as_slice()),
         ];
-        let processes = vec![
-            String::from("kitty"),
-            String::from("Code Helper"),
-            String::from("node\n/usr/local/CLAUDE/cli.js"),
-            String::from("codex"),
+        let processes = [
+            "kitty",
+            "Code Helper",
+            "node\n/usr/local/CLAUDE/cli.js",
+            "codex",
         ];
         assert_eq!(pick_tool(tools.into_iter(), &processes), Some("Claude"));
         assert_eq!(
@@ -183,6 +263,74 @@ mod tests {
         );
         assert_eq!(pick_tool(tools.into_iter(), &[]), None);
         Ok(())
+    }
+
+    #[test]
+    fn names_match_whole_words_at_path_starts() {
+        assert!(matches("Code Helper (Plugin)", "code"));
+        assert!(matches(
+            "/Applications/Visual Studio Code.app/Contents/MacOS/Code",
+            "code"
+        ));
+        assert!(matches("claude", "claude"));
+        assert!(matches(
+            "node\n/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+            "claude"
+        ));
+        assert!(!matches(
+            "/opt/@anthropic-ai/claude-code/bin/claude.exe",
+            "code"
+        ));
+        assert!(!matches("codex", "code"));
+        assert!(!matches("Xcode", "code"));
+        assert!(!matches("kitten", "kitty"));
+    }
+
+    fn process(pid: u32, parent: u32, text: &str) -> Process {
+        Process {
+            pid,
+            parent: Some(parent),
+            text: String::from(text),
+        }
+    }
+
+    #[test]
+    fn focus_credits_the_app_and_the_best_tool_inside_it() {
+        let names = [
+            vec![String::from("kitty")],
+            vec![String::from("code")],
+            vec![String::from("claude")],
+            vec![String::from("nvim")],
+        ];
+        let tools = [
+            (2, "Terminal", names[0].as_slice()),
+            (1, "VS Code", names[1].as_slice()),
+            (0, "Claude Code", names[2].as_slice()),
+            (1, "Neovim", names[3].as_slice()),
+        ];
+        let processes = [
+            process(10, 1, "kitty"),
+            process(11, 10, "-zsh"),
+            process(12, 11, "nvim"),
+            process(20, 1, "Code"),
+            process(21, 20, "Code Helper"),
+            process(30, 1, "Google Chrome"),
+            process(31, 30, "claude"),
+        ];
+        assert_eq!(
+            pick_tools(&tools, &processes, Some(10)),
+            ["Terminal", "Neovim"]
+        );
+        assert_eq!(pick_tools(&tools, &processes, Some(20)), ["VS Code"]);
+        assert!(pick_tools(&tools, &processes, Some(30)).is_empty());
+        assert_eq!(pick_tools(&tools, &processes, None), ["Claude Code"]);
+        assert_eq!(pick_tools(&tools, &processes, Some(99)), ["Claude Code"]);
+        let mut with_agent = processes.to_vec();
+        with_agent.push(process(13, 11, "claude"));
+        assert_eq!(
+            pick_tools(&tools, &with_agent, Some(10)),
+            ["Terminal", "Claude Code"]
+        );
     }
 
     #[test]
