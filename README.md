@@ -1,33 +1,32 @@
-# touchgrass
+<div align="center">
 
-Track active time in your dev tools and view it as a terminal heatmap.
-Runs on macOS and Linux. Time stays on your computer.
+### touchgrass
 
-Requires Rust 1.95 or newer.
+[![check](https://img.shields.io/github/actions/workflow/status/ado11231/touchgrass/check.yml?label=check&logo=github)](https://github.com/ado11231/touchgrass/actions/workflows/check.yml)
+[![rust](https://img.shields.io/badge/rust-1.95%2B-orange?logo=rust)](https://www.rust-lang.org)
+[![platform](https://img.shields.io/badge/platform-macos%20%7C%20linux-lightgrey)](#installation)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+track how long you spend in your dev tools
+
+<img src="assets/preview.svg" alt="touchgrass showing a year heatmap and today's time per tool" width="100%">
+
+</div>
+
+### Installation
+
+Requires Rust 1.95 or newer on macOS or Linux.
 
 ```sh
+git clone https://github.com/ado11231/touchgrass.git
+cd touchgrass
 cargo install --path . --locked
-touchgrass install
-touchgrass
+touchgrass install   # start tracking now and at every login
+touchgrass           # show your time
 ```
 
-```text
-touchgrass          Show recent time
-touchgrass 2026     Show one calendar year
-touchgrass track    Track in the current terminal
-touchgrass install  Start now and at login
-touchgrass uninstall
-                    Stop the login service and keep saved time
-```
-
-While you are active, the tracker credits the focused app (kitty, VS Code)
-and the best tool running inside it (Claude Code in a kitty tab, Neovim).
-Untracked apps, like a browser, count nothing.
-Edit `config.toml` to change the tool list or idle limit.
-
-Linux autostart needs a systemd user session. Idle checks use `xprintidle`
-on X11 or `gdbus` on GNOME Wayland. If idle checks are unavailable, the
-tracker warns once and counts as active.
+On Linux, autostart needs a systemd user session. Idle checks use `xprintidle`
+on X11 or `gdbus` on GNOME Wayland.
 
 - [Commands and output](docs/COMMANDS.md)
 - [Design, settings, and saved files](docs/ARCHITECTURE.md)
