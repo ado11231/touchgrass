@@ -2,7 +2,7 @@
 
 ### touchgrass
 
-[![check](https://img.shields.io/github/actions/workflow/status/ado11231/touchgrass/check.yml?label=check&logo=github)](https://github.com/ado11231/touchgrass/actions/workflows/check.yml)
+[![check](https://github.com/ado11231/touchgrass/actions/workflows/check.yml/badge.svg)](https://github.com/ado11231/touchgrass/actions/workflows/check.yml)
 [![rust](https://img.shields.io/badge/rust-1.95%2B-orange?logo=rust)](https://www.rust-lang.org)
 [![platform](https://img.shields.io/badge/platform-macos%20%7C%20linux-lightgrey)](#installation)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
