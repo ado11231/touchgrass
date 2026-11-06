@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.95"
 description = "Track active time in your dev tools"
 license = "MIT"
+repository = "https://github.com/ado11231/touchgrass"
 authors = ["ado11231 <adoalagic0@gmail.com>"]
 
 [lints.clippy]
