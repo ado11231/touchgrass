@@ -18,9 +18,7 @@ track how long you spend in your dev tools
 Requires Rust 1.95 or newer on macOS or Linux.
 
 ```sh
-git clone https://github.com/ado11231/touchgrass.git
-cd touchgrass
-cargo install --path . --locked
+cargo install touchgrass
 touchgrass install   # start tracking now and at every login
 touchgrass           # show your time
 ```
