@@ -167,7 +167,7 @@ fn track(config_path: PathBuf, data_folder: PathBuf) -> Result<()> {
     };
     data.installed_on.get_or_insert(Local::now().date_naive());
     storage::save(&data_path, &data)?;
-    let mut system = sysinfo::System::new();
+    let mut system = sysinfo::System::new().context("failed to initialize system info")?;
     let mut warned = false;
     tracker::run(shutdown, |event| {
         match event {
