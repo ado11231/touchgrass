@@ -22,12 +22,3 @@ cargo install touchgrass
 touchgrass install   # start tracking now and at every login
 touchgrass           # show your time
 ```
-
-On Linux, autostart needs a systemd user session. Idle checks use `xprintidle`
-on X11 or `gdbus` on GNOME Wayland.
-
-- [Commands and output](docs/COMMANDS.md)
-- [Design, settings, and saved files](docs/ARCHITECTURE.md)
-- [Contributing](docs/CONTRIBUTING.md)
-
-[MIT license](LICENSE).
