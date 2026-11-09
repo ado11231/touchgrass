@@ -30,7 +30,7 @@ names = [\"nvim\"]
 [[tools]]
 name = \"Terminal\"
 kind = \"terminal\"
-names = [\"kitty\", \"ghostty\", \"iTerm2\"]
+names = [\"kitty\", \"ghostty\", \"iTerm2\", \"Warp\"]
 ";
 
 /// Tool kinds in order of priority.
